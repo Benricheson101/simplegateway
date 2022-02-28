@@ -19,11 +19,12 @@ func main() {
 	gw.Sequence = seq
 
 	ctx := context.Background()
-	err := gw.TryResume(ctx)
+	err := gw.Up(ctx)
 	if err != nil {
 		fmt.Println("couldnt resume session:", err)
 		os.Exit(1)
 	}
+	fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
 
 	select {}
 }
