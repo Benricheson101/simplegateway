@@ -23,6 +23,8 @@ var (
 	ErrResumeFail       = errors.New("failed to resume session")
 )
 
+type EventHandlerFunc func(gw *Gateway, ev *GenericDispatchPayload)
+
 type Gateway struct {
 	sync.RWMutex
 
@@ -45,6 +47,8 @@ type Gateway struct {
 
 	Sequence  int64
 	SessionID string
+
+	handlerFunc EventHandlerFunc
 }
 
 type Shard [2]int
@@ -137,7 +141,6 @@ func (gw *Gateway) TryResume(ctx context.Context) error {
 }
 
 func (gw *Gateway) readMessages(ctx context.Context) {
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -239,14 +242,12 @@ func (gw *Gateway) connect(ctx context.Context) error {
 	return nil
 }
 
-// TODO: make this cancelable
 func (gw *Gateway) startHeartbeat(ctx context.Context) {
 	t := time.NewTicker(gw.heartbeatInterval)
 	defer t.Stop()
 
 	for {
 		seq := atomic.LoadInt64(&gw.Sequence)
-		// log.Printf("<- %v %v\n", HEARTBEAT, seq)
 		gw.wsMu.Lock()
 		gw.conn.WriteJSON(HeartbeatPayload{Op: HEARTBEAT, Data: seq})
 		gw.wsMu.Unlock()
@@ -272,7 +273,6 @@ func (gw *Gateway) onMessage(msg []byte) {
 
 	switch event.Op {
 	case DISPATCH:
-		// log.Printf("-> %v: %v\n", event.Op, event.Type)
 		if event.Type == "READY" {
 			var data ReadyPayloadData
 			if err := json.Unmarshal(event.Data, &data); err != nil {
@@ -282,6 +282,8 @@ func (gw *Gateway) onMessage(msg []byte) {
 
 			gw.SessionID = data.SessionID
 		}
+
+		go gw.handlerFunc(gw, &event)
 
 	case HEARTBEAT:
 		seq := atomic.LoadInt64(&gw.Sequence)
@@ -300,4 +302,8 @@ func (gw *Gateway) onMessage(msg []byte) {
 	case HEARTBEAT_ACK:
 		gw.lastHeartbeatAck = time.Now().UTC()
 	}
+}
+
+func (gw *Gateway) HandleFunc(h EventHandlerFunc) {
+	gw.handlerFunc = h
 }

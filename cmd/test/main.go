@@ -13,7 +13,7 @@ func main() {
 	gw := gateway.New(os.Getenv("DISCORD_TOKEN"))
 	gw.Identify = gateway.IdentifyPayloadData{
 		Shard:   &gateway.GatewayShard{0, 1},
-		Intents: 583,
+		Intents: 32511,
 		Properties: gateway.IdentifyPayloadDataProperties{
 			OS:      "MacOS",
 			Browser: "simplegateway",
@@ -27,12 +27,18 @@ func main() {
 		},
 	}
 
+	gw.HandleFunc(func(gw *gateway.Gateway, ev *gateway.GenericDispatchPayload) {
+		if ev.Type == "READY" {
+			fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
+		}
+
+		fmt.Println(string(ev.Data))
+	})
+
 	ctx := context.Background()
 	if err := gw.Up(ctx); err != nil {
 		log.Fatalln(err)
 	}
-
-	fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
 
 	select {}
 }

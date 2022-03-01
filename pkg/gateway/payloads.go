@@ -174,26 +174,3 @@ type ReadyPayloadData struct {
 	Guilds      []UnavailableGuild `json:"guilds"`
 	Application Application        `json:"application"`
 }
-
-type User struct {
-	ID            string  `json:"id"`
-	Username      string  `json:"username"`
-	Discriminator string  `json:"discriminator"`
-	Verified      bool    `json:"verified"`
-	PublicFlags   int     `json:"public_flags"`
-	MFAEnabled    bool    `json:"mfa_enabled"`
-	Flags         int     `json:"flags"`
-	Email         *string `json:"email"`
-	Bot           bool    `json:"bot"`
-	Avatar        *string `json:"avatar"`
-}
-
-type UnavailableGuild struct {
-	ID          string `json:"id"`
-	Unavailable bool   `json:"unavailable"`
-}
-
-type Application struct {
-	ID    string `json:"id"`
-	Flags int    `json:"flags"`
-}
