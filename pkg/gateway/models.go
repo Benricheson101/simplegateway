@@ -1,5 +1,7 @@
 package gateway
 
+// TODO: add ullability/omitempty
+
 type Snowflake string
 
 type ChannelType int
@@ -29,7 +31,6 @@ const (
 	GUILD_STAGE_VOICE = 13
 )
 
-// TODO: add omitempty in relevant places
 type Channel struct {
 	// the id of this channel
 	ID Snowflake `json:"id"`
@@ -230,7 +231,7 @@ type Guild struct {
 	// all active threads in the guild that current user has permission to view
 	Threads []Channel `json:"threads *"`
 	// presences of the members in the guild, will only include non-offline members if the size is greater than large threshold
-	Presences []PresenceUpdate `json:"presences *"`
+	Presences []Presence `json:"presences *"`
 	// the maximum number of presences for the guild (null is always returned, apart from the largest of guilds)
 	MaxPresences int `json:"max_presences"`
 	// the maximum number of members for the guild
@@ -376,7 +377,7 @@ type GuildMember struct {
 	CommunicationDisabledUntil string `json:"communication_disabled_until"`
 }
 
-type PresenceUpdate struct {
+type Presence struct {
 	// the user presence is being updated for
 	User User `json:"user"`
 	// id of the guild
@@ -779,7 +780,6 @@ type Message struct {
 	TTS bool `json:"tts"`
 	// whether this message mentions everyone
 	MentionEveryone bool `json:"mention_everyone"`
-	// TODO: is this the right type
 	// users specifically mentioned in the message
 	Mentions []User `json:"mentions"`
 	// roles specifically mentioned in this message

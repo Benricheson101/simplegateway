@@ -192,7 +192,7 @@ type GuildMembersChunk struct {
 	// if passing an invalid id to REQUEST_GUILD_MEMBERS, it will be returned here
 	NotFound []Snowflake `json:"not_found"`
 	// if passing true to REQUEST_GUILD_MEMBERS, presences of the returned members will be here
-	Presences []PresenceUpdate `json:"presences"`
+	Presences []Presence `json:"presences"`
 	// the nonce used in the Guild Members Request
 	Nonce string `json:"nonce"`
 }
@@ -345,7 +345,121 @@ type MessageBulkDelete struct {
 	// the id of the channel
 	ChannelID Snowflake `json:"channel_id"`
 	// the id of the guild
-	GuildID Snowflake `json:"guild_id?"`
+	GuildID Snowflake `json:"guild_id,omitempty"`
 }
 
-// TODO: here down https://discord.com/developers/docs/topics/gateway#message-reaction-add
+// Sent when a user adds a reaction to a message
+type MessageReactionAdd struct {
+	// the id of the user
+	UserID Snowflake `json:"user_id"`
+	// the id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+	// the id of the message
+	MessageID Snowflake `json:"message_id"`
+	// the id of the guild
+	GuildID Snowflake `json:"guild_id,omitempty"`
+	// the member who reacted if this happened in a guild
+	Member GuildMember `json:"member,omitempty"`
+	// the emoji used to react - example
+	Emoji Emoji `json:"emoji"`
+}
+
+// Sent when a user removes a reaction from a message
+type MessageReactionRemove struct {
+	// the id of the user
+	UserID Snowflake `json:"user_id"`
+	// the id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+	// the id of the message
+	MessageID Snowflake `json:"message_id"`
+	// the id of the guild
+	GuildID Snowflake `json:"guild_id,omitempty"`
+	// the emoji used to react
+	Emoji Emoji `json:"emoji"`
+}
+
+// Sent when a user explicitly removes all reactions from a message
+type MessageReactionRemoveAll struct {
+	// the id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+	// the id of the message
+	MessageID Snowflake `json:"message_id"`
+	// the id of the guild
+	GuildID Snowflake `json:"guild_id,omitempty"`
+}
+
+// Sent when a bot removes all instances of a given emoji from the reactions of a message
+type MessageReactionRemoveEmoji struct {
+	// the id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+	// the id of the guild
+	GuildID Snowflake `json:"guild_id,omitempty"`
+	// the id of the message
+	MessageID Snowflake `json:"message_id"`
+	// the emoji that was removed
+	Emoji Emoji `json:"emoji"`
+}
+
+// Sent when a user's presence or info, such as name or avatar, is updated
+type PresenceUpdate struct {
+	Presence
+}
+
+// Sent when a user starts typing in a channel
+type TypingStart struct {
+	// id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+	// id of the guild
+	GuildID Snowflake `json:"guild_id,omitempty"`
+	// id of the user
+	UserID Snowflake `json:"user_id"`
+	// unix time (in seconds) of when the user started typing
+	Timestamp int `json:"timestamp"`
+	// the member who started typing if this happened in a guild
+	Member *GuildMember `json:"member,omitempty"`
+}
+
+// Sent when properties about the user change
+type UserUpdate struct {
+	User
+}
+
+// Sent when someone joins/leaves/moves voice channels
+type VoiceStateUpdate struct {
+	VoiceState
+}
+
+// Sent when a guild's voice server is updated. This is sent when initially connecting to voice, and when the current voice instance fails over to a new server
+type VoiceServerUpdate struct {
+	// voice connection token
+	Token string `json:"token"`
+	// the guild this voice server update is for
+	GuildID Snowflake `json:"guild_id"`
+	// the voice server host
+	Endpoint *string `json:"endpoint"`
+}
+
+// Sent when a guild channel's webhook is created, updated, or deleted
+type WebhooksUpdate struct {
+	// id of the guild
+	GuildID Snowflake `json:"guild_id"`
+	// id of the channel
+	ChannelID Snowflake `json:"channel_id"`
+}
+
+// TODO: type InteractionCreate struct{}
+
+// Sent when a Stage instance is created (i.e. the Stage is now "live")
+type StageInstanceCreate struct {
+	StageInstance
+}
+
+// Sent when a Stage instance has been updated
+type StageInstanceUpdate struct {
+	StageInstance
+}
+
+// Sent when a Stage instance has been deleted (i.e. the Stage has been closed)
+type StageInstanceDelete struct {
+	StageInstance
+}
