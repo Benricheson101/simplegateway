@@ -31,6 +31,10 @@ func main() {
 		fmt.Printf("Ready as %v#%v with %d guilds\n", r.User.Username, r.User.Discriminator, len(r.Guilds))
 	})
 
+	gw.AddHandleFunc(func(gw *gateway.Gateway, r *gateway.Ready) {
+		fmt.Println("Second READY handler")
+	})
+
 	gw.AddHandleFunc(func(gw *gateway.Gateway, ev *gateway.MessageCreate) {
 		fmt.Println("MESSAGE CREATE")
 	})
