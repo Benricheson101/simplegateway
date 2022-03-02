@@ -2,8 +2,10 @@ name: 'Generate Event Handler'
 
 on:
   push:
+    branches: ['main']
     paths:
       - 'pkg/gateway/events.go'
+      - 'cmd/build/main.go'
 
 jobs:
   build:
