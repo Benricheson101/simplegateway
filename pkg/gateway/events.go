@@ -5,6 +5,8 @@ import (
 	"reflect"
 )
 
+// will the workflow work?
+
 // The ready event is dispatched when a client has completed the initial handshake with the gateway (for new sessions). The ready event can be the largest and most complex event the gateway will send, as it contains all the state required for a client to begin interacting with the rest of the platform
 type Ready struct {
 	// gateway version
