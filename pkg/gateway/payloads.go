@@ -164,13 +164,3 @@ type HelloPayloadData struct {
 	HeartbeatInterval int      `json:"heartbeat_interval"`
 	Trace             []string `json:"_trace"`
 }
-
-// --- EVENTS ---
-
-type ReadyPayloadData struct {
-	Version     int                `json:"v"`
-	User        User               `json:"user"`
-	SessionID   string             `json:"session_id"`
-	Guilds      []UnavailableGuild `json:"guilds"`
-	Application Application        `json:"application"`
-}

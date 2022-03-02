@@ -286,13 +286,13 @@ type Role struct {
 	// position of this role
 	Position int `json:"position"`
 	// permission bit set
-	Permissions string `json:"permissions"`
+	Permissions int64 `json:"permissions"`
 	// whether this role is managed by an integration
 	Managed bool `json:"managed"`
 	// whether this role is mentionable
 	Mentionable bool `json:"mentionable"`
 	// the tags this role has
-	Tags []RoleTag `json:"tags"`
+	Tags RoleTag `json:"tags"`
 }
 
 type RoleTag struct {

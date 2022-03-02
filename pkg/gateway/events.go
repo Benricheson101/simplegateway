@@ -1,5 +1,26 @@
 package gateway
 
+import (
+	"bytes"
+	"reflect"
+)
+
+// The ready event is dispatched when a client has completed the initial handshake with the gateway (for new sessions). The ready event can be the largest and most complex event the gateway will send, as it contains all the state required for a client to begin interacting with the rest of the platform
+type Ready struct {
+	// gateway version
+	Version int `json:"v"`
+	// information about the user including email
+	User User `json:"user"`
+	// the guilds the user is in
+	Guilds []UnavailableGuild `json:"guilds"`
+	// used for resuming connections
+	SessionID string `json:"session_id"`
+	// the shard information associated with this session, if sent when identifying
+	Shard *GatewayShard `json:"shard,omitempty"`
+	// contains id and flags
+	Application Application `json:"application"`
+}
+
 // Sent when a new guild channel is created, relevant to the current user
 type ChannelCreate struct {
 	Channel
@@ -462,4 +483,45 @@ type StageInstanceUpdate struct {
 // Sent when a Stage instance has been deleted (i.e. the Stage has been closed)
 type StageInstanceDelete struct {
 	StageInstance
+}
+
+func eventHandlerToEventName(fn interface{}) string {
+	typ := reflect.TypeOf(fn)
+	if typ.Kind() != reflect.Func {
+		panic("type is not func")
+	}
+
+	ins := typ.NumIn()
+	if ins != 2 {
+		panic("wrong number of parameters")
+	}
+
+	snd := typ.In(1)
+	if snd.Kind() != reflect.Ptr {
+		panic("second param must be a ptr")
+	}
+
+	sndInd := reflect.Indirect(reflect.ValueOf(snd))
+	if sndInd.Kind() != reflect.Struct {
+		panic("second param must be of type `struct`")
+	}
+
+	return camelToScreamingSnake(snd.Elem().Name())
+}
+
+func camelToScreamingSnake(s string) string {
+	var buf bytes.Buffer
+
+	for i, c := range s {
+		if c >= 'A' && c <= 'Z' {
+			if i > 0 {
+				buf.WriteRune('_')
+			}
+			buf.WriteRune(c)
+		} else {
+			buf.WriteRune(c + 'A' - 'a')
+		}
+	}
+
+	return buf.String()
 }

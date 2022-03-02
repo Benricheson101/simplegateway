@@ -28,7 +28,15 @@ func main() {
 	}
 
 	gw.AddHandleFunc(func(gw *gateway.Gateway, r *gateway.Ready) {
-		fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
+		fmt.Printf("Ready as %v#%v with %d guilds\n", r.User.Username, r.User.Discriminator, len(r.Guilds))
+	})
+
+	gw.AddHandleFunc(func(gw *gateway.Gateway, ev *gateway.MessageCreate) {
+		fmt.Println("MESSAGE CREATE")
+	})
+
+	gw.AddHandleFunc(func(gw *gateway.Gateway, gc *gateway.GuildCreate) {
+		fmt.Printf("name = %v, ownerID = %v\n", gc.Name, gc.OwnerID)
 	})
 
 	ctx := context.Background()

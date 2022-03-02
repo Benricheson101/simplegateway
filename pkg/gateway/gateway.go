@@ -23,13 +23,13 @@ var (
 	ErrResumeFail       = errors.New("failed to resume session")
 )
 
-type EventHandlerFunc func(gw *Gateway, ev *GenericDispatchPayload)
-
 type Gateway struct {
-	sync.RWMutex
+	sync.Mutex
 
-	rc                *rest.RestClient
-	wsMu              sync.Mutex
+	rc        *rest.RestClient
+	wsMu      sync.Mutex
+	handlerMu sync.Mutex
+
 	conn              *websocket.Conn
 	heartbeatInterval time.Duration
 	heartbeatTicker   *time.Ticker
@@ -37,9 +37,7 @@ type Gateway struct {
 
 	MaxReconnectAttempts int
 
-	// TODO: is it a bad idea to pass around context like this?
-	context context.Context
-	cancel  context.CancelFunc
+	cancel context.CancelFunc
 
 	Identify IdentifyPayloadData
 
@@ -48,13 +46,14 @@ type Gateway struct {
 	Sequence  int64
 	SessionID string
 
-	handlerFunc EventHandlerFunc
+	handlers map[string][]interface{}
 }
 
-type Shard [2]int
+// type Shard [2]int
 
 func New(token string) *Gateway {
 	return &Gateway{
+		handlers:             make(map[string][]interface{}),
 		token:                token,
 		rc:                   rest.New(token),
 		MaxReconnectAttempts: 3,
@@ -68,7 +67,7 @@ func (gw *Gateway) Up(ctx context.Context) error {
 	return gw.connect(ctx)
 }
 
-func (gw *Gateway) resume() error {
+func (gw *Gateway) resume(ctx context.Context) error {
 	resumePayload := ResumePayload{
 		Op: RESUME,
 		Data: ResumePayloadData{
@@ -101,11 +100,12 @@ func (gw *Gateway) resume() error {
 	if m.Op == 9 {
 		return ErrResumeFail
 	} else {
-		gw.onMessage(msg)
+		gw.onMessage(ctx, msg)
 	}
 
-	go gw.startHeartbeat(gw.context)
-	go gw.readMessages(gw.context)
+	// TODO: should these use a new context.Context?
+	go gw.startHeartbeat(ctx)
+	go gw.readMessages(ctx)
 
 	return nil
 }
@@ -119,7 +119,6 @@ func (gw *Gateway) TryResume(ctx context.Context) error {
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	gw.context = ctx
 	gw.cancel = cancel
 
 	var header http.Header
@@ -137,7 +136,7 @@ func (gw *Gateway) TryResume(ctx context.Context) error {
 	}
 	gw.heartbeatInterval = time.Millisecond * time.Duration(hello.Data.HeartbeatInterval)
 
-	return gw.resume()
+	return gw.resume(ctx)
 }
 
 func (gw *Gateway) readMessages(ctx context.Context) {
@@ -180,7 +179,7 @@ func (gw *Gateway) readMessages(ctx context.Context) {
 			return
 		}
 
-		go gw.onMessage(msg)
+		go gw.onMessage(ctx, msg)
 	}
 }
 
@@ -226,7 +225,7 @@ func (gw *Gateway) connect(ctx context.Context) error {
 			return fmt.Errorf("%s: %v", ErrWriteMessageFail, err)
 		}
 	} else {
-		err := gw.resume()
+		err := gw.resume(ctx)
 		// if the connection cannot be resumed, re-identify
 		if err != nil {
 			gw.Sequence = 0
@@ -260,7 +259,7 @@ func (gw *Gateway) startHeartbeat(ctx context.Context) {
 	}
 }
 
-func (gw *Gateway) onMessage(msg []byte) {
+func (gw *Gateway) onMessage(ctx context.Context, msg []byte) {
 	var event GenericDispatchPayload
 	if err := json.Unmarshal(msg, &event); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to parse JSON from event: %v\n", err)
@@ -273,17 +272,38 @@ func (gw *Gateway) onMessage(msg []byte) {
 
 	switch event.Op {
 	case DISPATCH:
-		if event.Type == "READY" {
-			var data ReadyPayloadData
-			if err := json.Unmarshal(event.Data, &data); err != nil {
-				fmt.Fprintf(os.Stderr, "failed to parse READY body: %v\n", err)
-				return
-			}
+		// if event.Type == "READY" {
+		// 	var data Ready
+		// 	if err := json.Unmarshal(event.Data, &data); err != nil {
+		// 		fmt.Fprintf(os.Stderr, "failed to parse READY body: %v\n", err)
+		// 		return
+		// 	}
 
-			gw.SessionID = data.SessionID
+		// gw.SessionID = data.SessionID
+		// }
+
+		eventPayload := eventNameToPayload(event.Type)
+		if eventPayload == nil {
+			fmt.Fprintf(os.Stderr, "Got event %v but did not have a corresponding struct to deserialize into\n", event.Type)
+			return
 		}
 
-		go gw.handlerFunc(gw, &event)
+		err := json.Unmarshal(event.Data, &eventPayload)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to unmarshal payload for event %v: %v\n", event.Type, err)
+			return
+		}
+
+		if event.Type == "READY" {
+			gw.SessionID = eventPayload.(*Ready).SessionID
+		}
+
+		// TODO: is it possible for this to deadlock?
+		gw.handlerMu.Lock()
+		handlers := gw.handlers[event.Type]
+		gw.handlerMu.Unlock()
+
+		execHandlerFunc(gw, handlers, event.Type, eventPayload)
 
 	case HEARTBEAT:
 		seq := atomic.LoadInt64(&gw.Sequence)
@@ -292,18 +312,44 @@ func (gw *Gateway) onMessage(msg []byte) {
 		gw.wsMu.Unlock()
 
 	case RECONNECT:
-		gw.connect(gw.context)
+		gw.connect(ctx)
 
 	case INVALID_SESSION:
 		gw.SessionID = ""
 		gw.Sequence = 0
-		gw.Up(gw.context)
+		gw.Up(ctx)
 
 	case HEARTBEAT_ACK:
 		gw.lastHeartbeatAck = time.Now().UTC()
 	}
 }
 
-func (gw *Gateway) HandleFunc(h EventHandlerFunc) {
-	gw.handlerFunc = h
+func (gw *Gateway) AddHandleFunc(fn interface{}) {
+	gw.handlerMu.Lock()
+	defer gw.handlerMu.Unlock()
+
+	eventName := eventHandlerToEventName(fn)
+	if !eventNameIsValid(eventName) {
+		fmt.Fprintf(os.Stderr, "handler for event %v could not be added because %v is not a valid event name\n", eventName, eventName)
+		return
+	}
+
+	handlers, ok := gw.handlers[eventName]
+	if ok {
+		handlers = append(handlers, fn)
+	} else {
+		handlers = []interface{}{fn}
+	}
+
+	gw.handlers[eventName] = handlers
+}
+
+func eventNameIsValid(ev string) bool {
+	for _, s := range EventNames {
+		if ev == s {
+			return true
+		}
+	}
+
+	return false
 }
