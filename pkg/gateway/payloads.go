@@ -92,7 +92,7 @@ type PresenceActivity struct {
 
 // --- 0 | DISPATCH ---
 
-type GenericDispatchPayload struct {
+type RawGatewayPayload struct {
 	Op       Opcode          `json:"op"`
 	Data     json.RawMessage `json:"d"`
 	Sequence int64           `json:"s"`

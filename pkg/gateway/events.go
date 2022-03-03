@@ -21,6 +21,9 @@ type Ready struct {
 	Application Application `json:"application"`
 }
 
+// The resumed event is dispatched when a client has sent a resume payload to the gateway (for resuming existing sessions).
+type Resumed struct{}
+
 // Sent when a new guild channel is created, relevant to the current user
 type ChannelCreate struct {
 	Channel
@@ -524,4 +527,14 @@ func camelToScreamingSnake(s string) string {
 	}
 
 	return buf.String()
+}
+
+func eventNameIsValid(ev string) bool {
+	for _, s := range EventNames {
+		if ev == s {
+			return true
+		}
+	}
+
+	return false
 }

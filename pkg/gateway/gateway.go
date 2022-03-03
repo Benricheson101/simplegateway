@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"sync"
@@ -15,6 +16,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// The number of heartbeat acks allowed to be missed before reconnecting
+const HEARTBEAT_FAILURES = 5
+
 var (
 	ErrOpenConnection   = errors.New("there is already an open websocket connection")
 	ErrDialWebsocket    = errors.New("failed to dial websocket")
@@ -22,6 +26,8 @@ var (
 	ErrWriteMessageFail = errors.New("failed to write message")
 	ErrResumeFail       = errors.New("failed to resume session")
 )
+
+type RawHandlerFunc func(*Gateway, *RawGatewayPayload)
 
 type Gateway struct {
 	sync.Mutex
@@ -34,10 +40,13 @@ type Gateway struct {
 	heartbeatInterval time.Duration
 	heartbeatTicker   *time.Ticker
 	lastHeartbeatAck  time.Time
+	lastHeartbeatSent time.Time
 
 	MaxReconnectAttempts int
 
-	cancel context.CancelFunc
+	cancel   context.CancelFunc
+	cancelHB context.CancelFunc
+	cancelRM context.CancelFunc
 
 	Identify IdentifyPayloadData
 
@@ -46,7 +55,8 @@ type Gateway struct {
 	Sequence  int64
 	SessionID string
 
-	handlers map[string][]interface{}
+	handlers    map[string][]interface{}
+	rawHandlers []RawHandlerFunc
 }
 
 // type Shard [2]int
@@ -57,6 +67,8 @@ func New(token string) *Gateway {
 		token:                token,
 		rc:                   rest.New(token),
 		MaxReconnectAttempts: 3,
+		lastHeartbeatAck:     time.Now(),
+		lastHeartbeatSent:    time.Now(),
 	}
 }
 
@@ -91,7 +103,7 @@ func (gw *Gateway) resume(ctx context.Context) error {
 		return ErrReadMessageFail
 	}
 
-	var m GenericDispatchPayload
+	var m RawGatewayPayload
 	err = json.Unmarshal(msg, &m)
 	if err != nil {
 		return ErrReadMessageFail
@@ -103,7 +115,6 @@ func (gw *Gateway) resume(ctx context.Context) error {
 		gw.onMessage(ctx, msg)
 	}
 
-	// TODO: should these use a new context.Context?
 	go gw.startHeartbeat(ctx)
 	go gw.readMessages(ctx)
 
@@ -161,12 +172,12 @@ func (gw *Gateway) readMessages(ctx context.Context) {
 					SESSION_TIMEOUT:
 
 					fmt.Fprintf(os.Stderr, "[WARN] websocket closed with code %v and will attempt to reconnect", code)
-					gw.connect(ctx)
+					gw.reconnect(ctx)
 
 				case INVALID_SESSION:
 					gw.Sequence = 0
 					gw.SessionID = ""
-					gw.connect(ctx)
+					gw.reconnect(ctx)
 
 				default:
 					fmt.Fprintf(os.Stderr, "[FATAL] websocket closed with code %v and CANNOT reconnect", code)
@@ -175,7 +186,8 @@ func (gw *Gateway) readMessages(ctx context.Context) {
 				}
 			}
 
-			gw.connect(ctx)
+			fmt.Println("error reading message:", err)
+			// gw.cancelHB()
 			return
 		}
 
@@ -196,14 +208,17 @@ func (gw *Gateway) DownWithCode(code int) error {
 }
 
 func (gw *Gateway) connect(ctx context.Context) error {
-	// TODO: is this a bad idea?
-	gw.conn = nil
+
 	var header http.Header
 	conn, _, err := websocket.DefaultDialer.Dial("wss://gateway.discord.gg", header)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDialWebsocket, err)
 	}
 	gw.conn = conn
+	conn.SetCloseHandler(func(code int, text string) error {
+		log.Printf("websocket close handler code=%v text=%v\n", code, text)
+		return nil
+	})
 
 	var hello HelloPayload
 	err = gw.conn.ReadJSON(&hello)
@@ -224,6 +239,14 @@ func (gw *Gateway) connect(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("%s: %v", ErrWriteMessageFail, err)
 		}
+
+		hbCtx, cancel := context.WithCancel(ctx)
+		gw.cancelHB = cancel
+		go gw.startHeartbeat(hbCtx)
+
+		rmCtx, cancel := context.WithCancel(ctx)
+		gw.cancelRM = cancel
+		go gw.readMessages(rmCtx)
 	} else {
 		err := gw.resume(ctx)
 		// if the connection cannot be resumed, re-identify
@@ -235,10 +258,14 @@ func (gw *Gateway) connect(ctx context.Context) error {
 		}
 	}
 
-	go gw.startHeartbeat(ctx)
-	go gw.readMessages(ctx)
-
 	return nil
+}
+
+func (gw *Gateway) reconnect(ctx context.Context) {
+	// TODO: move reconnect logic here
+	// TODO: set max reconnect?
+
+	fmt.Println("pretend the bot is reconnecting now")
 }
 
 func (gw *Gateway) startHeartbeat(ctx context.Context) {
@@ -248,8 +275,18 @@ func (gw *Gateway) startHeartbeat(ctx context.Context) {
 	for {
 		seq := atomic.LoadInt64(&gw.Sequence)
 		gw.wsMu.Lock()
-		gw.conn.WriteJSON(HeartbeatPayload{Op: HEARTBEAT, Data: seq})
+		err := gw.conn.WriteJSON(HeartbeatPayload{Op: HEARTBEAT, Data: seq})
 		gw.wsMu.Unlock()
+
+		if time.Now().Sub(gw.lastHeartbeatAck) > (gw.heartbeatInterval * time.Duration(HEARTBEAT_FAILURES) * time.Millisecond) {
+			fmt.Printf("discord failed to ack the last %v heartbeats. reconnecting...\n", HEARTBEAT_FAILURES)
+			gw.DownWithCode(websocket.CloseServiceRestart)
+		} else if err != nil {
+			log.Println("failed to send heartbeat packet:", err)
+		} else {
+			// log.Println("successful heartbeat")
+			gw.lastHeartbeatSent = time.Now()
+		}
 
 		select {
 		case <-t.C:
@@ -260,7 +297,7 @@ func (gw *Gateway) startHeartbeat(ctx context.Context) {
 }
 
 func (gw *Gateway) onMessage(ctx context.Context, msg []byte) {
-	var event GenericDispatchPayload
+	var event RawGatewayPayload
 	if err := json.Unmarshal(msg, &event); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to parse JSON from event: %v\n", err)
 		return
@@ -270,18 +307,12 @@ func (gw *Gateway) onMessage(ctx context.Context, msg []byte) {
 		atomic.StoreInt64(&gw.Sequence, event.Sequence)
 	}
 
+	for _, rawHandlerFn := range gw.rawHandlers {
+		go rawHandlerFn(gw, &event)
+	}
+
 	switch event.Op {
 	case DISPATCH:
-		// if event.Type == "READY" {
-		// 	var data Ready
-		// 	if err := json.Unmarshal(event.Data, &data); err != nil {
-		// 		fmt.Fprintf(os.Stderr, "failed to parse READY body: %v\n", err)
-		// 		return
-		// 	}
-
-		// gw.SessionID = data.SessionID
-		// }
-
 		eventPayload := eventNameToPayload(event.Type)
 		if eventPayload == nil {
 			fmt.Fprintf(os.Stderr, "Got event %v but did not have a corresponding struct to deserialize into\n", event.Type)
@@ -344,12 +375,9 @@ func (gw *Gateway) AddHandleFunc(fn interface{}) {
 	gw.handlers[eventName] = handlers
 }
 
-func eventNameIsValid(ev string) bool {
-	for _, s := range EventNames {
-		if ev == s {
-			return true
-		}
-	}
+func (gw *Gateway) AddRawHandlerFunc(fn RawHandlerFunc) {
+	gw.handlerMu.Lock()
+	defer gw.handlerMu.Unlock()
 
-	return false
+	gw.rawHandlers = append(gw.rawHandlers, fn)
 }

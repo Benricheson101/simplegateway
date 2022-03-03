@@ -31,6 +31,10 @@ func main() {
 		fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
 	})
 
+	gw.AddHandleFunc(func(gw *gateway.Gateway, mc *gateway.MessageCreate) {
+		fmt.Printf("[MESSAGE_CREATE] %v\n", mc.Content)
+	})
+
 	ctx := context.Background()
 	if err := gw.Up(ctx); err != nil {
 		log.Fatalln(err)

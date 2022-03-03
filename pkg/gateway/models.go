@@ -47,15 +47,15 @@ type Channel struct {
 	// the channel topic (0-1024 characters)
 	Topic string `json:"topic"`
 	// whether the channel is nsfw
-	Nsfw bool `json:"nsfw"`
+	NSFW bool `json:"nsfw"`
 	// the id of the last message sent in this channel (may not point to an existing or valid message)
-	Last_message_id bool `json:"last_message_id"`
+	LastMessageID Snowflake `json:"last_message_id"`
 	// the bitrate (in bits) of the voice channel
 	Bitrate int `json:"bitrate"`
 	// the user limit of the voice channel
 	UserLimit int `json:"user_limit"`
 	// amount of seconds a user has to wait before sending another message (0-21600); bots, as well as users with the permission manage_messages or manage_channel, are unaffected
-	RateLimitPerUser int `json:"rate_limit_per_user*"`
+	RateLimitPerUser int `json:"rate_limit_per_user"`
 	// the recipients of the DM
 	Recipients []User `json:"recipients"`
 	// icon hash of the group DM
@@ -90,11 +90,11 @@ type PermissionOverwrite struct {
 	// role or user id
 	ID Snowflake `json:"id"`
 	// either 0 (role) or 1 (member)
-	Type int `json:"type"`
+	Type string `json:"type"`
 	// permission bit set
-	Allow string `json:"allow"`
+	Allow int `json:"allow"`
 	// permission bit set
-	Deny string `json:"deny"`
+	Deny int `json:"deny"`
 }
 
 type User struct {
@@ -177,7 +177,7 @@ type Guild struct {
 	// discovery splash hash; only present for guilds with the "DISCOVERABLE"feature
 	Discovery_splash string `json:"discovery_splash"`
 	// true if the user is the owner of the guild
-	Owner bool `json:"owner **"`
+	Owner bool `json:"owner"`
 	// id of owner
 	OwnerID Snowflake `json:"owner_id"`
 	// total permissions for the user in the guild (excludes overwrites)
@@ -215,7 +215,7 @@ type Guild struct {
 	// the id of the channel where Community guilds can display rules and/or guidelines
 	RulesChannelID Snowflake `json:"rules_channel_id"`
 	// when this guild was joined at
-	JoinedAt string `json:"joined_at *"`
+	JoinedAt string `json:"joined_at"`
 	// true if this is considered a large guild
 	Large bool `json:"large"`
 	// true if this guild is unavailable due to an outage
@@ -223,15 +223,15 @@ type Guild struct {
 	// total number of members in this guild
 	MemberCount int `json:"member_count"`
 	// states of members currently in voice channels; lacks the guild_id key
-	VoiceStates []VoiceState `json:"voice_states *"`
+	VoiceStates []VoiceState `json:"voice_states"`
 	// users in the guild
-	Members []GuildMember `json:"members *"`
+	Members []GuildMember `json:"members"`
 	// channels in the guild
-	Channels []Channel `json:"channels *"`
+	Channels []Channel `json:"channels"`
 	// all active threads in the guild that current user has permission to view
-	Threads []Channel `json:"threads *"`
+	Threads []Channel `json:"threads"`
 	// presences of the members in the guild, will only include non-offline members if the size is greater than large threshold
-	Presences []Presence `json:"presences *"`
+	Presences []Presence `json:"presences"`
 	// the maximum number of presences for the guild (null is always returned, apart from the largest of guilds)
 	MaxPresences int `json:"max_presences"`
 	// the maximum number of members for the guild
@@ -261,11 +261,11 @@ type Guild struct {
 	// guild NSFW level
 	NSFWLevel int `json:"nsfw_level"`
 	// Stage instances in the guild
-	StageInstances []StageInstance `json:"stage_instances *"`
+	StageInstances []StageInstance `json:"stage_instances"`
 	// custom guild stickers
 	Stickers []Sticker `json:"stickers"`
 	// the scheduled events in the guild
-	GuildScheduledEvents []GuildScheduledEvent `json:"guild_scheduled_events *"`
+	GuildScheduledEvents []GuildScheduledEvent `json:"guild_scheduled_events"`
 	// whether the guild has the boost progress bar enabled
 	PremiumProgressBarEnabled bool `json:"premium_progress_bar_enabled"`
 }
@@ -532,7 +532,7 @@ type Sticker struct {
 	// description of the sticker
 	Description string `json:"description"`
 	// autocomplete/suggestion tags for the sticker (max 200 characters)
-	Tags *string `json:"tags*"`
+	Tags *string `json:"tags"`
 	// Deprecated previously the sticker asset hash, now an empty string
 	Asset string `json:"asset"`
 	// type of sticker
@@ -574,7 +574,7 @@ type GuildScheduledEvent struct {
 	// the time the scheduled event will start
 	ScheduledStartTime string `json:"scheduled_start_time"`
 	// the time the scheduled event will end, required if entity_type is EXTERNAL
-	ScheduledEndTime string `json:"scheduled_end_time **"`
+	ScheduledEndTime string `json:"scheduled_end_time"`
 	// the privacy level of the scheduled event
 	PrivacyLevel GuildScheduledEventPrivacyLevel `json:"privacy_level"`
 	// the status of the scheduled event
@@ -584,7 +584,7 @@ type GuildScheduledEvent struct {
 	// the id of an entity associated with a guild scheduled event
 	EntityID Snowflake `json:"entity_id"`
 	// additional metadata for the guild scheduled event
-	EntityMetadata GuildScheduledEventEntityMetadata `json:"entity_metadata **"`
+	EntityMetadata GuildScheduledEventEntityMetadata `json:"entity_metadata"`
 	// the user that created the scheduled event
 	Creator User `json:"creator"`
 	// the number of users subscribed to the scheduled event
@@ -636,17 +636,17 @@ type Integration struct {
 	// whether emoticons should be synced for this integration (twitch only currently)
 	EnableEmoticons bool `json:"enable_emoticons"`
 	// the behavior of expiring subscribers
-	ExpireBehavior IntegrationExpireBehavior `json:"expire_behavior *"`
+	ExpireBehavior IntegrationExpireBehavior `json:"expire_behavior"`
 	// the grace period (in days) before expiring subscribers
 	ExpireGracePeriod int `json:"expire_grace_period"`
 	// user for this integration
-	User User `json:"user *"`
+	User User `json:"user"`
 	// integration account information
 	Account IntegrationAccount `json:"account"`
 	// when this integration was last synced
-	SyncedAt string `json:"synced_at *"`
+	SyncedAt string `json:"synced_at"`
 	// how many subscribers this integration has
-	SubscriberCount int `json:"subscriber_count *"`
+	SubscriberCount int `json:"subscriber_count"`
 	// has this integration been revoked
 	Revoked bool `json:"revoked"`
 	// The bot/OAuth2 application for discord integrations
@@ -744,7 +744,7 @@ type Team struct {
 type TeamMember struct {
 	// the user's membership state on the team
 	MembershipState TeamMembershipState `json:"membership_state"`
-	// will always be ["*"]
+	// will always be [""]
 	Permissions []string `json:"permissions"`
 	// the id of the parent team of which they are a member
 	TeamID Snowflake `json:"team_id"`
@@ -767,9 +767,9 @@ type Message struct {
 	// id of the guild the message was sent in
 	GuildID Snowflake `json:"guild_id"`
 	// the author of this message (not guaranteed to be a valid user, see below)
-	Author User `json:"author*"`
+	Author User `json:"author"`
 	// member properties for this message's author
-	Member GuildMember `json:"member**"`
+	Member GuildMember `json:"member"`
 	// contents of the message
 	Content string `json:"content"`
 	// when this message was sent
@@ -785,7 +785,7 @@ type Message struct {
 	// roles specifically mentioned in this message
 	MentionRoles []Snowflake `json:"mention_roles"`
 	// channels specifically mentioned in this message
-	MentionChannels []ChannelMention `json:"mention_channels****"`
+	MentionChannels []ChannelMention `json:"mention_channels"`
 	// any attached files
 	Attachments []Attachment `json:"attachments"`
 	// any embedded content
@@ -811,7 +811,7 @@ type Message struct {
 	// message flags combined as a bitfield
 	Flags int `json:"flags"`
 	// the message associated with the message_reference
-	ReferencedMessage *Message `json:"referenced_message*****"`
+	ReferencedMessage *Message `json:"referenced_message"`
 	// sent if the message is a response to an Interaction
 	// TODO: interactions
 	// Interaction message interaction object `json:"interaction"`
@@ -987,7 +987,7 @@ type MessageReference struct {
 	// id of the originating message
 	MessageID Snowflake `json:"message_id"`
 	// id of the originating message's channel
-	ChannelID Snowflake `json:"channel_id *"`
+	ChannelID Snowflake `json:"channel_id"`
 	// id of the originating message's guild
 	GuildID Snowflake `json:"guild_id"`
 	// when sending, whether to error if the referenced message doesn't exist instead of sending as a normal (non-reply) message, default true
