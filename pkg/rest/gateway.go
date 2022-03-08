@@ -16,14 +16,21 @@ type GatewayBot struct {
 	} `json:"session_start_limit"`
 }
 
-func (r *RestClient) GetGatewayAuthed() *GatewayBot {
-	req, _ := http.NewRequest("GET", "https://discord.com/api/v10/gateway/bot", nil)
-	res, _ := r.authed(req)
+func (r *RestClient) GetGatewayAuthed() (*GatewayBot, error) {
+	req, err := http.NewRequest("GET", "https://discord.com/api/v10/gateway/bot", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := r.authed(req)
+	if err != nil {
+		return nil, err
+	}
 
 	var body GatewayBot
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return &body
+	return &body, nil
 }

@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
 
 	"github.com/benricheson101/simplegateway/pkg/gateway"
+	"github.com/benricheson101/simplegateway/pkg/gateway/intents"
 )
 
 const SHARD_STATE_FILE = "shard_state.json"
@@ -27,23 +26,6 @@ type ShardSessions struct {
 }
 
 func main() {
-	gw := gateway.New(os.Getenv("DISCORD_TOKEN"))
-	gw.Identify = gateway.IdentifyPayloadData{
-		Shard:   &gateway.GatewayShard{0, 1},
-		Intents: 32511,
-		Properties: gateway.IdentifyPayloadDataProperties{
-			OS:      "MacOS",
-			Browser: "simplegateway",
-			Device:  "simplegateway",
-		},
-		Presence: &gateway.IdentifyPayloadDataPresence{
-			Status: gateway.DO_NOT_DISTURB,
-			Activities: &[]gateway.PresenceActivity{
-				{Name: "i work :D", Type: gateway.PLAYING},
-			},
-		},
-	}
-
 	var state *ShardSessions
 	s := getState()
 	if s == nil {
@@ -52,28 +34,39 @@ func main() {
 		}
 	} else {
 		state = s
-
-		a := state.Shards[0]
-		gw.Sequence = a.Sequence
-		gw.SessionID = a.SessionID
 	}
 
-	gw.AddRawHandlerFunc(func(g *gateway.Gateway, rgp *gateway.RawGatewayPayload) {
-		if rgp.Type != "READY" && rgp.Sequence != 0 {
+	sessionID := ""
+	sequence := int64(0)
+
+	if sh0, ok := state.Shards[0]; ok && sh0.Sequence != 0 && sh0.SessionID != "" {
+		sessionID = sh0.SessionID
+		sequence = sh0.Sequence
+	}
+
+	gw := gateway.New(
+		os.Getenv("DISCORD_TOKEN"),
+		gateway.WithIntents(intents.AllWithoutPrivileged().Add(intents.GUILD_MESSAGES)),
+		gateway.WithShard(0, 1),
+		gateway.WithSession(sessionID, sequence),
+		gateway.WithStatus(gateway.DO_NOT_DISTURB),
+		gateway.WithActivity(gateway.WATCHING, "i work :D"),
+	)
+
+	gw.AddRawHandlerFunc(func(g *gateway.Gateway, pl *gateway.RawGatewayPayload) {
+		if pl.Type != "READY" && pl.Sequence != 0 {
 			state.Lock()
 			s := state.Shards[0]
-			s.Sequence = rgp.Sequence
+			s.Sequence = pl.Sequence
 			state.Unlock()
 		}
 
-		if rgp.Type != "" {
-			fmt.Println(rgp.Type)
+		if pl.Type != "" {
+			fmt.Println(pl.Type)
 		}
 	})
 
-	gw.AddHandleFunc(func(gw *gateway.Gateway, r *gateway.Ready) {
-		// fmt.Printf("sid = %v seq = %v\n", gw.SessionID, gw.Sequence)
-
+	gw.AddHandlerFunc(func(gw *gateway.Gateway, r *gateway.Ready) {
 		state.Lock()
 		state.Shards[0] = &ShardResumeState{
 			SessionID: r.SessionID,
@@ -82,33 +75,26 @@ func main() {
 		state.Unlock()
 	})
 
-	gw.AddHandleFunc(func(gw *gateway.Gateway, mc *gateway.MessageCreate) {
-		if mc.Content == "!save" && mc.Author.ID == "255834596766253057" {
-			saveState(state)
-		}
-	})
-
 	ctx := context.Background()
 
 	if gw.SessionID != "" && gw.Sequence != 0 {
-		fmt.Println("Attempting to resume session")
-		if err := gw.TryResume(ctx); err != nil {
-			if errors.Is(err, gateway.ErrResumeFail) {
-				fmt.Println("failed to resume session. IDENTIFYing")
-
-				gw.Sequence = 0
-				gw.SessionID = ""
-				if err = gw.Up(ctx); err != nil {
-					log.Fatalln(err)
-				}
-			} else {
-				log.Fatalln(err)
+		fmt.Println("stored sessionID and sequence present. attempting to resume")
+		err := gw.TryResume(ctx)
+		if err != nil {
+			fmt.Println("resume failed, attempting to identify")
+			gw.SessionID = ""
+			gw.Sequence = 0
+			err = gw.Up(ctx)
+			if err != nil {
+				fmt.Println("failed to resume or become ready:", err)
+				os.Exit(1)
 			}
 		}
 	} else {
-		fmt.Println("No stored sessionID or sequence. IDENTIFYing")
-		if err := gw.Up(ctx); err != nil {
-			log.Fatalln(err)
+		err := gw.Up(ctx)
+		if err != nil {
+			fmt.Println("couldnt start bot:", err)
+			os.Exit(1)
 		}
 	}
 
@@ -134,7 +120,6 @@ func saveState(state *ShardSessions) error {
 func getState() (ret *ShardSessions) {
 	_, err := os.Stat(SHARD_STATE_FILE)
 	if err != nil {
-		// fmt.Fprintf(os.Stderr, "stat on state file %v failed: %v\n", SHARD_STATE_FILE, err)
 		return nil
 	}
 
